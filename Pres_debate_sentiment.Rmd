@@ -1,0 +1,239 @@
+---
+title: "SENTIMENT OF OCT 2016 PRES DEBATE SPEECH"
+author: "WW44SS"
+date: "Oct 10, 2016"
+output: 
+    html_document:
+        css: markdown7.css
+        toc: true
+        toc_depth: 1
+        keep_md: true
+---
+
+
+###SUMMARY
+Can we learn anything about a debate and it's outcome from a "sentiment" analysis? I adapt methods recently hightlight by David Robinson and Julia Silge to create a kind of "movie" version of the sentiment analysis, with text of especially "strong" sentiment highlighted.
+
+###DATA SOURCES AND METHODS
+The text of the debate are downloaded from the [UCSB Presidency Project](http://www.presidency.ucsb.edu/debates.php). Transcripts were pasted into Apple Pages and stored as unformatted .txt files.  
+
+The .txt files are made tidy by a separate `.R` program which removes punctuation and annotation and then categorized by speaker. The data are stored as a .csv file which is loaded here for analysis. 
+
+The menthods are similar to a [previous post on the VP debates](http://rpubs.com/ww44ss/vp_debate), so I have suppressed most of the code from this printout.
+
+```{r, "yo function", echo=TRUE}
+## this is an identity helper-function useful for simplifying debug of piped analysis steps
+## it does "nothing", but does so as a function.
+yo <-function(x){return(x)}
+
+```
+
+```{r, "load r libraries", echo=TRUE, warning=FALSE, message=FALSE}
+    library(dplyr)
+    library(animation)
+    library(ggplot2)
+    library(tidytext)
+```
+
+```{r, "find debate files in directory", echo=FALSE, warning=FALSE, message=FALSE, tidy=TRUE}
+
+    ## 
+    ## .txt file detection
+    
+    directory <- "/Users/winstonsaunders/Documents/oct_2016_pres_debate/"
+    list_of_files <- list.files(directory)
+```
+
+
+```{r, tidy=TRUE}
+    ## search for and read lightly cleaned debate text .csv
+    file_of_data <- list_of_files[grepl("_tidy", list_of_files)]
+    debate_text <- read.csv(paste0(directory, file_of_data), stringsAsFactors = FALSE) %>% as_data_frame
+```
+
+We now begin processing by taking the text, unnesting the sentences, and removing stop words using the onix lexicon
+
+```{r, tidy=FALSE}
+
+    ## compute stop_words_list
+    list_of_stop_words <- stop_words %>%
+        filter(lexicon == "snowball") %>% 
+        select(word) %>% 
+        yo
+
+
+    ## create tidy df of debate words
+    words_from_the_debate <- debate_text %>%
+        unnest_tokens(word, text) %>%
+        filter(!word %in% list_of_stop_words) %>% 
+        yo
+```
+
+We create a "sentiment dictionary" from the information stored in the `tidytext` package and use a `left_join` to assicate words with the sentiment values.
+
+```{r, tidy=TRUE, echo = FALSE}
+    ## compute sentiment dictionary
+    word_sentiment_dict <- sentiments %>%
+        filter(lexicon == "AFINN") %>%
+        select(word, sentiment = score) %>%
+        yo
+    
+    ## get sentiment of individual words by joining data with dictionary using left_join
+    ## and then assigning NA's to zero
+    debate_words_sentiments <-words_from_the_debate %>%
+        left_join(word_sentiment_dict, by = "word") %>%
+        mutate(sentiment = ifelse(is.na(sentiment), 0, sentiment)) %>%
+        mutate(sentiment = as.numeric(sentiment)) %>%
+        yo
+    
+    nonzero_sentiment_debate_words <- debate_words_sentiments %>% filter(sentiment != 0)
+```
+
+To look at the trend of the sentiment, we can create an exponentially damped cummulative sum function to apply to the data. The idea is that words have immediate punch, but it wanes as time and words pass. So that's the idea...
+
+```{r, tidy=TRUE, echo = FALSE}
+    decay_sum <- function(x, decay_rate = 0.1421041) {
+        ## EXPONENTIALLY DAMPED CUMMULIATVE SUM
+        ## input:   x (a vector of length >1)
+        ##          decay_rate (exponential damping factor)
+        ## output:  decay_sum (a vector with the cummulatve sum)
+        
+        ## create output vector
+        if (length(x) > 1) decay_sum <- 1.*(1:length(x))
+        
+        ## initialize
+        decay_sum[1] <- x[1]*1.
+    
+        ## compute the sum using a dreaded loop.
+        if (length(x) > 1) {
+            for (i in 2:length(x)){
+                decay_sum[i] <- x[i] + exp(-1.*decay_rate) * decay_sum[i-1]
+            }
+        }
+        
+        return(decay_sum)
+    }
+```
+
+We can now compute the sum of the sentiment and the cummulative sum.
+
+```{r}
+    ## compute sentiment of debate responses by regrouping and compute means and cumsums
+    debate_sentiment <- debate_words_sentiments %>%
+        group_by(X, name) %>%
+        summarize(sentiment = sum(sentiment)) %>%
+        group_by(name) %>%
+        #mutate(cumm_sent = cumsum(sentiment)) %>%
+        mutate(cumm_sent = decay_sum(sentiment, decay_rate = 0.02)) %>%
+        yo
+```
+
+The final step is to pull it all together to create a plot data frame. 
+
+```{r, tidy=TRUE, echo = FALSE}
+    ## create data_frame for plotting. Since some X have no entry, need to fix those
+    plot_df <- debate_sentiment %>% left_join(debate_text, by = c("X", "name")) %>%
+        select("X" = X, "name" = name, sentiment, cumm_sent, text) %>%
+        group_by(name) %>%
+        yo
+```
+
+```{r}
+## suppress announcer and audience questioner text
+plot_df <- plot_df %>% filter(name == "TRUMP" | name == "CLINTON")
+
+```
+
+
+From here use the `animation` package functions to create the gif.
+
+```{r, eval = TRUE, echo = FALSE, tidy=TRUE}
+    ## go back and add words for strong sentiment
+    gif_steps <- c(plot_df$X[plot_df$sentiment < -8 | plot_df$sentiment > 8 ], plot_df$X[nrow(plot_df)])
+    ## get rid of first line since it is usually parasitic
+    gif_steps <- gif_steps[-1]
+```
+
+I had to manually add annotation. Using just "high senitment" words, while interesting, doesn't really tell a narrative. Using the full text is just too long to read in a .GIF format. So in this case I have paraphrased the text. This has the problem that it doesn't currenlty scale (If I were to annotate each line it could, but that would take more time than I have). Here are the annotations. 
+
+```{r, echo = TRUE, tidy = TRUE}
+
+annote = c("i have a very positive and optimistic view - the slogan of my campaign is stronger together",
+           "i want to do things - making our inner cities better for the african american citizens that are so great", 
+           "yes i m very embarrassed by it i hate it but it's locker room talk", "so this is who donald trump is - this is not who we are",
+           "all you have to do is take a look at wikileaks", "after a year long investigation there is no evidence that anyone hacked the server", 
+           "i want very much to save what works and is good about the affordable care act", 
+           "the affordable care act was meant to try to fill the gap", 
+           "there are children suffering in this catastrophic war", 
+           "i will tell you very strongly when bernie sanders said she had bad judgment", 
+           "one thing i'd do is get rid of carried interest", 
+           "i understand the tax code better than anybody that's ever run for president",  
+           "i don't like assad at all but assad is killing isis", 
+           "i have generals and admirals who endorsed me", 
+           "the greatest disaster trade deal in the history of the world", 
+           "tweeting happens to be a modern day form of communication", 
+           "justice scalia great judge died recently and we have a vacancy", 
+           "i respect his children his children are incredibly able and devoted", 
+           "i consider her statement about my children to be a very nice compliment", 
+           "she doesn't quit she doesn't give up i respect that")
+
+
+ann_text <- data.frame(X = 220, sentiment = 20, lab = annote,
+                       name = plot_df$name[plot_df$X %in% gif_steps])
+
+```
+
+I added some features to the plot, so here is the new code.
+
+```{r eval = FALSE, tidy=TRUE}   
+   
+    saveGIF({
+    for (j in 1:length(gif_steps)) {
+        i <- gif_steps[j]
+        
+        ## color code summary text
+        if (plot_df$sentiment[plot_df$X == i] < 0) {
+            title_color = "darkred"
+        } else {
+            title_color = "darkblue"
+        }
+        
+        title_h = 0
+        
+        print( 
+            ## the ggplot stack
+            ggplot(plot_df, aes(x = X, y = sentiment, fill = name)) +
+                geom_bar(stat = 'identity', alpha = 1., width = 2) +
+                geom_line(data = plot_df%>% filter(X <= i), aes(x=X, y = 15*cumm_sent/max(abs(plot_df$cumm_sent))), size = 3, color = "grey20", alpha = 0.5) +
+                xlim(range(plot_df$X)) +
+                ylim(range(plot_df$sentiment)) +
+                xlab("index") +
+                ggtitle(paste0(plot_df$name[plot_df$X == i], ": ", ann_text$lab[j])) +
+                facet_grid(name~.) +
+                theme(plot.title = element_text(size = 14, hjust = title_h, color = title_color, face="bold"), legend.position = "bottom") +
+                geom_vline(xintercept = i, color = "grey50")
+        
+            ) 
+        }
+        }, interval = 1.2, movie.name = paste0(directory,"sentiment_animation2.gif"), ani.width = 700, ani.height = 450)
+    
+```
+
+
+Here is the gif produced. The title with the paraphrased text helps follow the debate. The grey bars advance with the title, while the mapped sentiment of the whole debate is displayed as a bar chart undrlying the trend lines.   
+  
+Some observations: 
+* Hillary's cumulative sentiment line remains positive for the entire debate.  
+* Donald's aggressive attacks are evident in the middle of the debate. These are expressed with mostly negative sentiment words.
+
+
+![Gif](/Users/winstonsaunders/Documents/oct_2016_pres_debate/sentiment_animation2.gif) 
+
+For what it's worth, here is the full text of the most polarized statements
+
+```{r, results = 'asis'}
+knitr::kable(plot_df %>% filter(X %in% gif_steps ) %>% select(X, name, sentiment, text), caption = "Most Positive and Negative Sentiment Phrases")
+
+```
+
+
