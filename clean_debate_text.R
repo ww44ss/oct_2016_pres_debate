@@ -2,6 +2,7 @@
 ## DEBATE DATA CLEANER. 
 
     ## Rev 0.1 ensured applause, interrupt etc are moved.
+    ## add tidytext package
 
     ## A utility program to produce cleaned data from the raw data stored on this site. 
     ## Read a text file. Filters and conditions the text. Creates a data frame with the row number, candidate name, and text.
