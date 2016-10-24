@@ -1,0 +1,204 @@
+---
+title: "THREE PRESIDENTIAL DEBATES"
+author: "WW44SS"
+date: "Oct 22, 2016"
+output: 
+    html_document:
+        css: markdown7.css
+        toc: true
+        toc_depth: 1
+        keep_md: true
+---
+
+
+###SUMMARY
+Can we learn anything about a debate and it's outcome from a "sentiment" analysis?  
+It was widely reported that Donald Trump's performances in the debates were marred by uneven performance. To paraphrase, he was able to stick to a script for the first part of the debate, until he got either mad or braggadocious.    
+
+* [Donald Trump Loses Discipline In Final Debate; Says He Might Reject Election Results](http://www.usnews.com/news/politics/articles/2016-10-20/donald-trump-loses-discipline-in-final-debate-says-he-might-reject-election-results)  
+* [Trump loses cool while Clinton stays calm during first presidential debate](https://www.theguardian.com/us-news/2016/sep/27/debate-clinton-trump-recap-presidential-election-hofstra)  
+
+Can we see evidence of his uneven performance in relation to his rivals? It turns out we can. Using a "decaying weighted sum" to monitor sentiment trends, this analysis shows Hillary Clinton maintain uniform positive sentiment, while that of Donald Trump showed greater volatility, especially in the second halves of the debates.
+
+###DATA SOURCES AND METHODS
+The text of the debate are downloaded from the [UCSB Presidency Project](http://www.presidency.ucsb.edu/debates.php). Transcripts were pasted into Apple Pages and stored as unformatted .txt files.  
+
+The .txt files are made tidy by a separate `.R` program which removes punctuation and annotation and then categorized by speaker. The data are stored as a .csv file which is loaded here for analysis. 
+
+The menthods are similar to a [previous post on the VP debates](http://rpubs.com/ww44ss/vp_debate), so I have suppressed most of the code from this printout.
+
+```{r, "yo function", echo=TRUE}
+## this is an identity helper-function useful for simplifying debug of piped analysis steps
+## it does "nothing", but does so as a function.
+yo <-function(x.x){return(x.x)}
+doh <- function(x.x){return(x.x)}
+RuhRoh <- function(x.x){return(x.x)}
+
+```
+
+```{r, "load r libraries", echo=TRUE, warning=FALSE, message=FALSE}
+    library(dplyr)
+    library(animation)
+    #devtools::install_github("hadley/ggplot2")
+    library(ggplot2)
+    library(tidytext)
+```
+
+```{r, "find debate files in directory", echo=FALSE, warning=FALSE, message=FALSE, tidy=TRUE}
+
+    ## 
+    ## .txt file detection
+    
+    directory <- "/Users/winstonsaunders/Documents/oct_2016_pres_debate/"
+    list_of_files <- list.files(directory)
+```
+
+
+```{r, tidy=TRUE}
+    ## search for and read lightly cleaned debate text .csv
+    data_files <- list_of_files[grepl("_tidy", list_of_files)]
+
+       
+    debate_df <- read.csv(paste0(directory, data_files[1]), stringsAsFactors = FALSE) %>% as_data_frame
+    first_debate <- debate_df %>% mutate(debate = "first")
+    
+    debate_df <- read.csv(paste0(directory, data_files[2]), stringsAsFactors = FALSE) %>% as_data_frame
+    second_debate <- debate_df %>% mutate(debate = "second")
+    
+    debate_df <- read.csv(paste0(directory, data_files[3]), stringsAsFactors = FALSE) %>% as_data_frame
+    third_debate <- debate_df %>% mutate(debate = "third")
+    
+    debate_text <- rbind(first_debate, second_debate, third_debate)
+    debate_text <- debate_text %>% select(debate, name, text, X )
+
+```
+
+We now begin processing by taking the text, unnesting the sentences, and removing stop words using the onix lexicon
+
+```{r, tidy=FALSE}
+
+    ## compute stop_words_list
+    list_of_stop_words <- stop_words %>%
+        filter(lexicon == "snowball") %>% 
+        select(word) %>% 
+        yo
+
+
+    ## create tidy df of debate words
+    words_from_the_debate <- debate_text %>%
+        unnest_tokens(word, text) %>%
+        filter(!word %in% list_of_stop_words) %>% 
+        yo
+```
+
+We create a "sentiment dictionary" from the information stored in the `tidytext` package and use a `left_join` to assicate words with the sentiment values.
+
+```{r, tidy=TRUE, echo = FALSE}
+    ## compute sentiment dictionary
+    word_sentiment_dict <- sentiments %>%
+        filter(lexicon == "AFINN") %>%
+        select(word, sentiment = score) %>%
+        yo
+    
+    ## get sentiment of individual words by joining data with dictionary using left_join
+    ## and then assigning NA's to zero
+    debate_words_sentiments <-words_from_the_debate %>%
+        left_join(word_sentiment_dict, by = "word") %>%
+        mutate(sentiment = ifelse(is.na(sentiment), 0, sentiment)) %>%
+        mutate(sentiment = as.numeric(sentiment)) %>%
+        yo
+    
+    nonzero_sentiment_debate_words <- debate_words_sentiments %>% filter(sentiment != 0)
+```
+
+To look at the trend of the sentiment, we can create an exponentially damped cummulative sum function to apply to the data. The idea is that words have immediate punch, but it wanes as time and words pass. So that's the idea...
+
+```{r, tidy=TRUE, echo = FALSE}
+    decay_sum <- function(x, decay_rate = 0.1421041) {
+        ## EXPONENTIALLY DAMPED CUMMULIATVE SUM
+        ## input:   x (a vector of length >1)
+        ##          decay_rate (exponential damping factor)
+        ## output:  decay_sum (a vector with the cummulatve sum)
+        
+        ## create output vector
+        if (length(x) > 1) decay_sum <- 1.*(1:length(x))
+        
+        ## initialize
+        decay_sum[1] <- x[1]*1.
+    
+        ## compute the sum using a dreaded loop.
+        if (length(x) > 1) {
+            for (i in 2:length(x)){
+                decay_sum[i] <- x[i] + exp(-1.*decay_rate) * decay_sum[i-1]
+            }
+        }
+        
+        return(decay_sum)
+    }
+```
+
+We can now compute the sum of the sentiment and the cummulative sum.
+
+```{r}
+    ## compute sentiment of debate responses by regrouping and compute means and cumsums
+    debate_sentiment <- debate_words_sentiments %>%
+        group_by(debate, X, name) %>%
+        summarize(sentiment = sum(sentiment)) %>%
+        group_by(name) %>%
+        #mutate(cumm_sent = cumsum(sentiment)) %>%
+        mutate(cumm_sent = decay_sum(sentiment, decay_rate = 0.02)) %>%
+        yo
+```
+
+The final step is to pull it all together to create a plot data frame. 
+
+```{r, tidy=TRUE, echo = FALSE}
+    ## create data_frame for plotting. Since some X have no entry, need to fix those
+    plot_df <- debate_sentiment %>% left_join(debate_text, by = c("debate", "X", "name")) %>%
+        select("debate"  = debate, "X" = X, "name" = name, sentiment, cumm_sent, text) %>%
+        #group_by(name) %>%
+        yo
+```
+
+```{r}
+## suppress announcer and audience questioner text
+plot_df <- plot_df %>% filter(name == "TRUMP" | name == "CLINTON")
+
+```
+
+
+```{r "raw plot", warning=FALSE}
+
+
+ggplot(plot_df, aes(x = X, y = sentiment, fill = name)) +
+                geom_bar(stat = 'identity', alpha = 1., width = 2) +
+                geom_line(data = plot_df, aes(x=X, y = 15*cumm_sent/max(abs(plot_df$cumm_sent))), size = 2, color = "#DD8511", alpha = 0.5) +
+                xlim(range(plot_df$X)) +
+                ylim(range(plot_df$sentiment)) +
+                xlab("index") +
+        labs(
+    title = "2016 Debate Sentiment",
+    subtitle = "Consistency versus Volatility",
+    caption = "Data from www.presidency.ucsb.edu"
+  ) +
+                facet_grid(debate~name) +
+        theme_bw() + 
+                theme(plot.title = element_text(size = 16, hjust = 0.5, color = "#222233", face="bold"), legend.position = "none", panel.background = element_rect(color = "#5566FF") )
+
+
+```
+
+
+
+
+For what it's worth, here is the text of the most polarized statements
+
+```{r, results = 'asis'}
+
+full_text <- plot_df %>% inner_join(debate_text, by = c("debate", "X")) %>% ungroup()
+
+knitr::kable(full_text %>% filter(sentiment < -10 | sentiment > 10) %>% select("debate" = debate, X, "name" = name.x, sentiment, "raw text" = text.y), caption = "Most Negative Sentiment Phrases")
+
+```
+
+

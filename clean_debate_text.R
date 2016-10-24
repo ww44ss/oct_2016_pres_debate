@@ -12,9 +12,13 @@
     ## OUTPUT:
     ##      returns a tibble data frame with name and cleaned text, in order. 
     
-    file_name <- "Pres_debate_oct_2016.txt"
+    file_name <- "First_Candidates_Debate.txt"
     directory <- "/Users/winstonsaunders/Documents/oct_2016_pres_debate/"
     raw_data <- read.table(paste0(directory, file_name), header=FALSE, sep="\n", stringsAsFactors = FALSE, quote = "")
+    
+    library(tidytext)
+    library(tidyr)
+    library(dplyr)
     
     ## convert to tibble
     raw_data <- raw_data %>% as_data_frame
