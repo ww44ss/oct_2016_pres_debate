@@ -97,7 +97,7 @@ We can now compute the sum of the sentiment and the cummulative sum.
         summarize(sentiment = sum(sentiment)) %>%
         group_by(name) %>%
         #mutate(cumm_sent = cumsum(sentiment)) %>%
-        mutate(cumm_sent = decay_sum(sentiment, decay_rate = 0.02)) %>%
+        mutate(cumm_sent = decay_sum(sentiment, decay_rate = 0.1)) %>%
         yo
 ```
 

@@ -12,7 +12,7 @@
     ## OUTPUT:
     ##      returns a tibble data frame with name and cleaned text, in order. 
     
-    file_name <- "First_Candidates_Debate.txt"
+    file_name <- "Second_Candidates_debate_oct_2016.txt"
     directory <- "/Users/winstonsaunders/Documents/oct_2016_pres_debate/"
     raw_data <- read.table(paste0(directory, file_name), header=FALSE, sep="\n", stringsAsFactors = FALSE, quote = "")
     

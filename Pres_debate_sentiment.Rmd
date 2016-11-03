@@ -47,11 +47,11 @@ yo <-function(x){return(x)}
 
 ```{r, tidy=TRUE}
     ## search for and read lightly cleaned debate text .csv
-    file_of_data <- list_of_files[grepl("_tidy", list_of_files)]
+    file_of_data <- list_of_files[grepl("_tidy", list_of_files) & grepl("Second", list_of_files)]
     debate_text <- read.csv(paste0(directory, file_of_data), stringsAsFactors = FALSE) %>% as_data_frame
 ```
 
-We now begin processing by taking the text, unnesting the sentences, and removing stop words using the onix lexicon
+We now begin processing by taking the text, unnesting the sentences, and removing stop words using the snowball lexicon
 
 ```{r, tidy=FALSE}
 

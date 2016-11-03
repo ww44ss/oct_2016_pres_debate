@@ -54,6 +54,7 @@ RuhRoh <- function(x.x){return(x.x)}
 ```
 
 
+
 ```{r, tidy=TRUE}
     ## search for and read lightly cleaned debate text .csv
     data_files <- list_of_files[grepl("_tidy", list_of_files)]
@@ -146,7 +147,7 @@ We can now compute the sum of the sentiment and the cummulative sum.
         summarize(sentiment = sum(sentiment)) %>%
         group_by(name) %>%
         #mutate(cumm_sent = cumsum(sentiment)) %>%
-        mutate(cumm_sent = decay_sum(sentiment, decay_rate = 0.02)) %>%
+        mutate(cumm_sent = decay_sum(sentiment, decay_rate = 0.1)) %>%
         yo
 ```
 
